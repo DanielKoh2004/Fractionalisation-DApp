@@ -153,11 +153,24 @@
     <div>&copy; 2025 RealEstate dApp. All rights reserved.</div>
   </footer>
   <script>
+// Utility to record a trade (copied from admin.html)
+function recordTrade({type, userId, propertyId, quantity, price}) {
+  const trades = JSON.parse(localStorage.getItem('trades')||'[]');
+  trades.push({
+    id: trades.length+1,
+    type, // 'buy' or 'sell'
+    userId,
+    propertyId,
+    quantity,
+    price,
+    timestamp: new Date().toISOString()
+  });
+  localStorage.setItem('trades', JSON.stringify(trades));
+}
 // Load properties from localStorage or use Malaysia examples
 function getProperties() {
-  const props = JSON.parse(localStorage.getItem('properties')||'null');
-  if (props && props.length) return props;
-  return malaysiaProperties;
+  const props = JSON.parse(localStorage.getItem('properties')||'[]');
+  return props;
 }
 
 function renderProperties() {
@@ -242,6 +255,16 @@ function buyShares() {
   });
   localStorage.setItem('transactions', JSON.stringify(transactions));
 
+  // Record trading history
+  if (typeof recordTrade === 'function') {
+    recordTrade({
+      type: 'buy',
+      userId: user.id,
+      propertyId: p.id,
+      quantity: shares,
+      price: p.sharePrice
+    });
+  }
   showTradeMsg(`Purchased ${shares} shares of ${p.title}.`);
   renderProperties();
   renderTradeDetails(idx);
@@ -285,9 +308,23 @@ function sellShares() {
     });
     localStorage.setItem('transactions', JSON.stringify(transactions));
 
+    // Record trading history
+    if (typeof recordTrade === 'function') {
+      recordTrade({
+        type: 'sell',
+        userId: user.id,
+        propertyId: p.id,
+        quantity: shares,
+        price: p.sharePrice
+      });
+    }
     showTradeMsg(`Sold ${shares} shares of ${p.title}.`);
     renderProperties();
     renderTradeDetails(idx);
+// Load recordTrade from admin.html if available
+if (typeof recordTrade !== 'function') {
+  window.recordTrade = function(){};
+}
   } else {
     showTradeMsg('Please login to sell shares.');
   }

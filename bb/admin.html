@@ -45,7 +45,7 @@
   .admin-desc {font-size:1.15rem;color:#444;line-height:1.6;margin-bottom:24px;}
   .card{background:#f6f5ff;padding:24px;border-radius:14px;box-shadow:0 2px 12px rgba(70,54,227,0.07);margin-bottom:32px;}
   input,textarea,button{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #e6eefc;box-sizing:border-box;}
-  button{background:#4636e3;color:#fff;font-weight:500;cursor:pointer;transition:background 0.2s;}
+  button{background:#4636e3;color:#fff;font-weight:500;cursor:pointer;}
   button:hover{background:#0b63ff;}
   h2{margin:6px 0}
   a{color:#0b63ff}
@@ -93,6 +93,10 @@
         <div id="deletePropList"></div>
         <div id="deleteMsg" class="small"></div>
       </div>
+      <div class="card">
+        <h3>Trading History</h3>
+        <div id="tradeHistory"></div>
+      </div>
     </div>
   </main>
 
@@ -101,6 +105,62 @@
   </footer>
 
 <script>
+// Utility to record a trade
+function recordTrade({type, userId, propertyId, quantity, price}) {
+  const trades = JSON.parse(localStorage.getItem('trades')||'[]');
+  trades.push({
+    id: trades.length+1,
+    type, // 'buy' or 'sell'
+    userId,
+    propertyId,
+    quantity,
+    price,
+    timestamp: new Date().toISOString()
+  });
+  localStorage.setItem('trades', JSON.stringify(trades));
+}
+
+// Render trading history in admin panel
+function renderTradeHistory() {
+  const trades = JSON.parse(localStorage.getItem('trades')||'[]');
+  const users = JSON.parse(localStorage.getItem('users')||'[]');
+  const props = JSON.parse(localStorage.getItem('properties')||'[]');
+  const container = document.getElementById('tradeHistory');
+  if (!container) return;
+  if (trades.length === 0) {
+    container.innerHTML = '<div>No trading history yet.</div>';
+    return;
+  }
+  container.innerHTML = `<table style="width:100%;border-collapse:collapse;font-size:0.98rem;">
+    <thead><tr style="background:#edeaff;color:#4636e3;font-weight:600;">
+      <th style="padding:8px;border:1px solid #e6eefc;">Type</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">User</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">Property Name</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">Property ID</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">Quantity</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">Price (ETH)</th>
+      <th style="padding:8px;border:1px solid #e6eefc;">Time</th>
+    </tr></thead>
+    <tbody>
+      ${trades.map(tr => {
+        const user = users.find(u=>u.id===tr.userId);
+        const prop = props.find(p=>p.id===tr.propertyId);
+        return `<tr>
+          <td style="padding:8px;border:1px solid #e6eefc;">${tr.type}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${user?user.username||user.email:tr.userId}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${prop?prop.title:'Unknown'}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${tr.propertyId}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${tr.quantity}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${tr.price}</td>
+          <td style="padding:8px;border:1px solid #e6eefc;">${new Date(tr.timestamp).toLocaleString()}</td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+renderTradeHistory();
+// To record trades, call recordTrade({type: 'buy'/'sell', userId, propertyId, quantity, price}) in your buy/sell logic in marketplace/profile pages.
 function renderAuth() {
   const userStr = localStorage.getItem('currentUser');
   const loginBtn = document.getElementById('loginBtn');
@@ -235,25 +295,6 @@ document.getElementById('createProp').addEventListener('click', ()=>{
     refreshPropSelect();
     window.location.href = 'marketplace.html';
   }
-});
-
-document.getElementById('distributeBtn').addEventListener('click', ()=>{
-  const amount = Number(document.getElementById('divAmount').value);
-  const propId = Number(document.getElementById('divProperty').value);
-  if (!amount||!propId) return document.getElementById('divMsg').innerText='Provide amount and property.';
-  const ownership = JSON.parse(localStorage.getItem('ownership')||'[]');
-  const owners = ownership.filter(o=>o.propertyId===propId && o.shares>0);
-  const totalShares = owners.reduce((s,o)=>s+o.shares,0);
-  if (totalShares===0) return document.getElementById('divMsg').innerText='Property has no shareholders.';
-  const transactions = JSON.parse(localStorage.getItem('transactions')||'[]');
-  const timestamp = new Date().toISOString();
-  owners.forEach(o=>{
-    const share = o.shares;
-    const payout = Math.round((amount * (share/totalShares))*100)/100;
-    transactions.push({id:transactions.length+1,type:'dividend',propertyId:propId,userId:o.userId,amount:payout,timestamp});
-  });
-  localStorage.setItem('transactions', JSON.stringify(transactions));
-  document.getElementById('divMsg').innerText=`Distributed $${amount} to ${owners.length} owners.`;
 });
 </script>
 </body>
