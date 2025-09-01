@@ -1,10 +1,29 @@
+
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import './Login.css';
 
+// MetaMask connection helper
+const connectMetaMask = async () => {
+  if (window.ethereum) {
+    try {
+      const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+      return accounts[0];
+    } catch (error) {
+      alert('MetaMask connection failed.');
+      return null;
+    }
+  } else {
+    alert('MetaMask not detected. Please install MetaMask.');
+    return null;
+  }
+};
+
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showAdmin, setShowAdmin] = useState(false);
+  const [userAddress, setUserAddress] = useState('');
   const navigate = useNavigate();
 
   // Initialize default users if not exist
@@ -17,6 +36,20 @@ export default function Login() {
     }
   }, []);
 
+  const handleAdminLogin = () => {
+    setShowAdmin(true);
+  };
+
+  const handleUserLogin = async () => {
+    const address = await connectMetaMask();
+    if (address) {
+      setUserAddress(address);
+      setShowAdmin(false);
+      localStorage.setItem('currentUser', JSON.stringify({ address, isAdmin: false }));
+      navigate('/');
+    }
+  };
+
   const handleLogin = () => {
     const users = JSON.parse(localStorage.getItem('users') || '[]');
     const u = users.find(x => x.email.toLowerCase() === email.trim().toLowerCase() && x.password === password);
@@ -25,10 +58,6 @@ export default function Login() {
       return;
     }
     localStorage.setItem('currentUser', JSON.stringify(u));
-    navigate('/');
-  };
-
-  const handleClose = () => {
     navigate('/');
   };
 
@@ -44,30 +73,53 @@ export default function Login() {
           cursor: 'pointer',
           zIndex: 2
         }}
-          title="Back to Home"
-          onClick={() => navigate('/')}
+          title={showAdmin ? "Back to Login Options" : "Back to Home"}
+          onClick={() => {
+            if (showAdmin) {
+              setShowAdmin(false);
+            } else {
+              navigate('/');
+            }
+          }}
         >
           &times;
         </span>
         <h2 style={{ textAlign: 'center', margin: '0 0 18px 0', fontWeight: 600, fontSize: '2rem', color: '#222' }}>Login</h2>
-        <div style={{ marginBottom: '12px', fontSize: 13, color: '#666' }}>
-          Demo admin: <code>admin@dapp</code> / <code>admin123</code>
-        </div>
-        <input
-          value={email}
-          onChange={e => setEmail(e.target.value)}
-          placeholder="Email"
-        />
-        <input
-          type="password"
-          value={password}
-          onChange={e => setPassword(e.target.value)}
-          placeholder="Password"
-        />
-        <button onClick={handleLogin}>Login</button>
-        <p style={{ fontSize: 13 }}>
-          No account? <Link to="/register">Register here</Link>
-        </p>
+
+        {!showAdmin && !userAddress && (
+          <div className="login-options" style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '20px' }}>
+            <button onClick={handleAdminLogin}>Admin Login</button>
+            <button onClick={handleUserLogin}>User Login (MetaMask)</button>
+          </div>
+        )}
+
+        {showAdmin && (
+          <>
+            <div style={{ marginBottom: '12px', fontSize: 13, color: '#666' }}>
+              Demo admin: <code>admin@dapp</code> / <code>admin123</code>
+            </div>
+            <input
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="Email"
+            />
+            <input
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Password"
+            />
+            <button onClick={handleLogin}>Login as Admin</button>
+            {/* Register link removed as requested */}
+          </>
+        )}
+
+        {userAddress && (
+          <div className="user-info" style={{ marginTop: '20px', textAlign: 'center' }}>
+            <p>Connected with MetaMask!</p>
+            <p>Wallet Address: {userAddress}</p>
+          </div>
+        )}
       </div>
     </div>
   );
