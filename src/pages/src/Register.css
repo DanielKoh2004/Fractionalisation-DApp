@@ -1,0 +1,65 @@
+.register-root {
+  font-family: Inter, Arial, sans-serif;
+  background: #f7fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+.register-root .card {
+  background: #fff;
+  padding: 22px;
+  border-radius: 12px;
+  box-shadow: 0 8px 30px rgba(10,20,50,0.06);
+  width: 380px;
+  position: relative;
+}
+.register-root input {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  box-sizing: border-box;
+}
+.register-root button {
+  width: 100%;
+  padding: 10px;
+  margin: 8px 0;
+  border-radius: 8px;
+  border: 1px solid #4636e3;
+  background: #4636e3;
+  color: #fff;
+  font-weight: 500;
+  box-sizing: border-box;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.register-root button:hover {
+  background: #0b63ff;
+}
+.register-root .close-btn {
+  position: absolute;
+  top: 18px;
+  right: 18px;
+  width: 32px;
+  height: 32px;
+  background: #edeaff;
+  border: none;
+  border-radius: 50%;
+  font-size: 1.3rem;
+  color: #4636e3;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(70,54,227,0.10);
+  transition: background 0.2s;
+}
+.register-root .close-btn:hover {
+  background: #d7e0ef;
+  color: #0b63ff;
+}
+.register-root a {
+  color: #0b63ff;
+}
