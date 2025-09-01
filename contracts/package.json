@@ -1,8 +1,18 @@
 {
   "devDependencies": {
-    "hardhat": "^3.0.3"
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "hardhat": "^2.22.5"
   },
   "dependencies": {
-    "@openzeppelin/contracts": "^5.4.0"
+    "@openzeppelin/contracts": "^5.4.0",
+    "build": "^0.1.4",
+    "npm": "^11.5.2",
+    "run": "^1.5.0"
+  },
+  "scripts": {
+    "build": "hardhat compile",
+    "test": "hardhat test",
+    "deploy": "node scripts/deploy.js"
   }
 }

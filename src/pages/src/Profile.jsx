@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Profile.css';
+import { web3Client } from './web3/client';
 
 const Profile = () => {
   const navigate = useNavigate();
@@ -10,6 +11,8 @@ const Profile = () => {
   const [transactions, setTransactions] = useState([]);
   const [dividendPools, setDividendPools] = useState([]);
   const [dividendMsg, setDividendMsg] = useState('');
+  const [onchainHoldings, setOnchainHoldings] = useState([]);
+  const [onchainTx, setOnchainTx] = useState([]);
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -19,24 +22,52 @@ const Profile = () => {
       return;
     }
     setUser(JSON.parse(userStr));
+    const props = JSON.parse(localStorage.getItem('properties') || '[]');
     setOwnership(JSON.parse(localStorage.getItem('ownership') || '[]'));
-    setProperties(JSON.parse(localStorage.getItem('properties') || '[]'));
+    setProperties(props);
     setTransactions(JSON.parse(localStorage.getItem('transactions') || '[]'));
+    (async () => {
+      try {
+        const { account } = await web3Client.connect();
+        const chainProps = await web3Client.getProperties(0, 50);
+        if (chainProps && chainProps.length) setProperties(chainProps);
+        const holdings = await web3Client.getHoldings(account, chainProps.length ? chainProps : props);
+        setOnchainHoldings(holdings);
+        const tx = await web3Client.getUserTransactions(account);
+        setOnchainTx(tx);
+      } catch (e) {
+        console.log('on-chain profile data not available', e);
+      }
+    })();
     setDividendPools(JSON.parse(localStorage.getItem('dividendPools') || '[]'));
   }, [navigate]);
 
-  const handleClaimDividends = () => {
-    setDividendMsg('Dividends claimed! (Demo only)');
-    setTimeout(() => setDividendMsg(''), 2500);
+  const handleClaimDividends = async () => {
+    try {
+      await web3Client.connect();
+      // For demo, claim for first property if exists
+      const first = properties[0];
+      if (!first) {
+        setDividendMsg('No properties.');
+        return;
+      }
+      await web3Client.claimDividends({ token: first.token || first.tokenAddress, propertyId: first.id || 0 });
+      setDividendMsg('Dividends claimed on-chain.');
+      setTimeout(() => setDividendMsg(''), 2500);
+    } catch (e) {
+      console.error(e);
+      setDividendMsg('Claim failed.');
+      setTimeout(() => setDividendMsg(''), 2500);
+    }
   };
 
   if (!user) return null;
 
-  // Properties owned
+  // Properties owned (off-chain fallback)
   const userProps = ownership.filter(o => o.userId === user.id && o.shares > 0);
 
-  // Transactions
-  const userTx = transactions.filter(t => t.userId === user.id);
+  // Transactions (prefer on-chain)
+  const userTx = onchainTx.length ? onchainTx : transactions.filter(t => t.userId === user.id);
 
   // Dividends
   const dividends = userProps.map(o => {
@@ -93,10 +124,19 @@ const Profile = () => {
                 <tr><th>Property</th><th>Shares Owned</th><th>Share Value (ETH)</th></tr>
               </thead>
               <tbody>
-                {userProps.length === 0 ? (
+                {userProps.length === 0 && onchainHoldings.length === 0 ? (
                   <tr><td colSpan={3}>No shares owned.</td></tr>
                 ) : (
-                  userProps.map(o => {
+                  (onchainHoldings.length ? onchainHoldings.map(o => {
+                    const prop = properties.find(p => p.id === o.propertyId);
+                    return (
+                      <tr key={o.propertyId}>
+                        <td>{prop ? prop.title || prop.metadataURI : '-'}</td>
+                        <td>{o.balance}</td>
+                        <td>{prop ? prop.sharePrice : '-'}</td>
+                      </tr>
+                    );
+                  }) : userProps.map(o => {
                     const prop = properties.find(p => p.id === o.propertyId);
                     return (
                       <tr key={o.propertyId}>
@@ -105,7 +145,7 @@ const Profile = () => {
                         <td>{prop ? prop.sharePrice : '-'}</td>
                       </tr>
                     );
-                  })
+                  }))
                 )}
               </tbody>
             </table>

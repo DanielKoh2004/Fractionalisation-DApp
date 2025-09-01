@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Admin.css';
+import { web3Client } from './web3/client';
+import { ethers } from 'ethers';
 
 const Admin = () => {
   const navigate = useNavigate();
@@ -14,6 +16,8 @@ const Admin = () => {
   const [propMsg, setPropMsg] = useState('');
   const [deleteMsg, setDeleteMsg] = useState('');
   const [previewImg, setPreviewImg] = useState('');
+  const [divForm, setDivForm] = useState({ propertyId: '', amountEth: '' });
+  const [divMsg, setDivMsg] = useState('');
 
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
@@ -46,7 +50,7 @@ const Admin = () => {
     reader.readAsDataURL(file);
   };
 
-  const handleCreateProperty = () => {
+  const handleCreateProperty = async () => {
     const { title, address, rentalYield, annualReturn, totalShares, sharePrice, image } = form;
     if (!title || !address || !rentalYield || !annualReturn || !totalShares || !sharePrice || !image) {
       setPropMsg('Complete all fields and upload image.');
@@ -68,10 +72,46 @@ const Admin = () => {
     props.push(p);
     localStorage.setItem('properties', JSON.stringify(props));
     setProperties(props);
-    setPropMsg('Property created.');
+    // On-chain create fractional token + registry entry
+    try {
+      await web3Client.connect();
+      // Only the Marketplace owner can create properties
+      const acct = await web3Client.getAccount();
+      const owner = await web3Client.getMarketplaceOwner();
+      if (!owner || owner.toLowerCase() !== acct.toLowerCase()) {
+        setPropMsg(`Only owner can create properties. Switch wallet to ${owner || 'owner'} or transfer ownership.`);
+        return;
+      }
+      setPropMsg('Creating property on-chain...');
+      const { receipt, propertyId, token } = await web3Client.createProperty({
+        name: `${title} Shares`,
+        symbol: title.replace(/[^A-Z0-9]/gi, '').slice(0, 6).toUpperCase() || 'PROP',
+        metadataURI: 'ipfs://placeholder',
+        totalShares: Number(totalShares),
+        sharePriceWei: ethers.parseEther(String(sharePrice)),
+        owner: (await web3Client.signer.getAddress())
+      });
+      console.log('createProperty', { receipt, propertyId, token });
+      if (propertyId !== undefined && token) {
+        setPropMsg(`Created on-chain: #${propertyId} token ${token.slice(0,6)}...${token.slice(-4)}`);
+        // Optional: store on the local item so the Admin list shows token
+        const updated = props.map(x => x.id === id ? { ...x, tokenAddress: token, onchainId: propertyId } : x);
+        localStorage.setItem('properties', JSON.stringify(updated));
+        setProperties(updated);
+        // Clear local fallback to force Marketplace to load from chain
+        localStorage.removeItem('properties');
+      } else {
+        setPropMsg('On-chain create confirmed, but event not parsed.');
+      }
+    } catch (e) {
+      console.error(e);
+      setPropMsg('On-chain create failed. See console.');
+      return;
+    }
     setForm({ title: '', address: '', rentalYield: '', annualReturn: '', totalShares: '', sharePrice: '', image: '' });
     setPreviewImg('');
-    navigate('/marketplace');
+    // Small delay to let the node index the event
+    setTimeout(() => navigate('/marketplace'), 600);
   };
 
   // Property deletion
@@ -84,6 +124,24 @@ const Admin = () => {
     localStorage.setItem('properties', JSON.stringify(props));
     setProperties(props);
     setDeleteMsg(`Property "${propTitle}" deleted.`);
+  };
+
+  // Deposit dividends on-chain
+  const handleDepositDividends = async () => {
+    if (!divForm.propertyId || !divForm.amountEth) {
+      setDivMsg('Select property and amount.');
+      return;
+    }
+    try {
+      await web3Client.connect();
+      const amountWei = ethers.parseEther(String(divForm.amountEth));
+      await web3Client.depositDividends({ propertyId: Number(divForm.propertyId), amountWei });
+      setDivMsg('Dividends deposited.');
+    } catch (e) {
+      console.error(e);
+      setDivMsg('Deposit failed.');
+    }
+    setTimeout(() => setDivMsg(''), 2500);
   };
 
   // Trading history
@@ -191,6 +249,18 @@ const Admin = () => {
             <div className="card">
               <h3>Trading History</h3>
               <div>{renderTradeHistory()}</div>
+            </div>
+            <div className="card">
+              <h3>Dividends</h3>
+              <select value={divForm.propertyId} onChange={e => setDivForm(f => ({ ...f, propertyId: e.target.value }))}>
+                <option value="">Select property</option>
+                {properties.map(p => (
+                  <option key={p.id} value={p.id}>{p.title} (#{p.id})</option>
+                ))}
+              </select>
+              <input type="number" step="0.0001" placeholder="Amount (ETH)" value={divForm.amountEth} onChange={e => setDivForm(f => ({ ...f, amountEth: e.target.value }))} />
+              <button onClick={handleDepositDividends}>Deposit Dividends</button>
+              <div className="small">{divMsg}</div>
             </div>
           </div>
         </div>

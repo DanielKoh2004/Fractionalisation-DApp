@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import './Marketplace.css';
+import { web3Client } from './web3/client';
+import { ethers } from 'ethers';
 
 function Header({ user }) {
   const navigate = useNavigate();
@@ -9,6 +11,16 @@ function Header({ user }) {
     localStorage.removeItem('currentUser');
     navigate('/');
     window.location.reload();
+  };
+  const [account, setAccount] = useState('');
+  const connect = async () => {
+    try {
+      const { account } = await web3Client.connect();
+      setAccount(account);
+    } catch (e) {
+      console.error(e);
+      alert('Wallet connect failed');
+    }
   };
   return (
     <header className="header">
@@ -23,6 +35,7 @@ function Header({ user }) {
           <Link to="/admin" className="nav-link">Admin</Link>
         )}
         <Link to="/about_us" className="nav-link">About Us</Link>
+        <button className="btn-login" onClick={connect}>{account ? account.slice(0,6)+'...'+account.slice(-4) : 'Connect Wallet'}</button>
         {!user ? (
           <button className="btn-login" onClick={handleLogin}>Login</button>
         ) : (
@@ -121,68 +134,42 @@ export default function Marketplace() {
   useEffect(() => {
     const userStr = localStorage.getItem('currentUser');
     setUser(userStr ? JSON.parse(userStr) : null);
+    // Load properties from localStorage fallback (until chain index is wired)
     const props = JSON.parse(localStorage.getItem('properties') || '[]');
     setProperties(props);
+    // Try loading from chain
+    (async () => {
+      try {
+        await web3Client.connect();
+        const onchain = await web3Client.getProperties(0, 50);
+        if (onchain && onchain.length) setProperties(onchain);
+      } catch {}
+    })();
   }, []);
   const showTradeMsg = msg => setTradeMsg(msg);
-  const handleBuy = (idx, shares) => {
+  const handleBuy = async (idx, shares) => {
     if (!shares || shares < 1) return showTradeMsg('Enter valid number of shares.');
-    const props = [...properties];
-    const p = props[idx];
-    if (shares > p.availableShares) return showTradeMsg('Not enough shares available.');
-    if (!user) return showTradeMsg('Please login to buy shares.');
-    p.availableShares -= shares;
-    localStorage.setItem('properties', JSON.stringify(props));
-    setProperties(props);
-    let ownership = JSON.parse(localStorage.getItem('ownership') || '[]');
-    let owner = ownership.find(o => o.userId === user.id && o.propertyId === p.id);
-    if (owner) {
-      owner.shares += shares;
-    } else {
-      ownership.push({ userId: user.id, propertyId: p.id, shares });
+    const p = properties[idx];
+    try {
+  await web3Client.connect();
+  await web3Client.buyShares({ propertyId: p.id || 0, token: p.token || p.tokenAddress, amount: shares, pricePerShareWei: ethers.parseEther(String(p.sharePrice || 0.001)) });
+      showTradeMsg(`On-chain: Purchased ${shares} shares of ${p.title}.`);
+    } catch (e) {
+      console.error(e);
+      showTradeMsg('On-chain buy failed. Check wallet and config.');
     }
-    localStorage.setItem('ownership', JSON.stringify(ownership));
-    let transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    transactions.push({
-      id: transactions.length + 1,
-      type: 'buy',
-      propertyId: p.id,
-      userId: user.id,
-      shares,
-      amount: Math.round(p.sharePrice * shares * 10000) / 10000,
-      timestamp: new Date().toISOString()
-    });
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-    showTradeMsg(`Purchased ${shares} shares of ${p.title}.`);
   };
-  const handleSell = (idx, shares) => {
+  const handleSell = async (idx, shares) => {
     if (!shares || shares < 1) return showTradeMsg('Enter valid number of shares.');
-    const props = [...properties];
-    const p = props[idx];
-    if (!user) return showTradeMsg('Please login to sell shares.');
-    let ownership = JSON.parse(localStorage.getItem('ownership') || '[]');
-    let owner = ownership.find(o => o.userId === user.id && o.propertyId === p.id);
-    if (!owner || owner.shares < shares) {
-      showTradeMsg('You do not have enough shares to sell.');
-      return;
+    const p = properties[idx];
+    try {
+      await web3Client.connect();
+      const receipt = await web3Client.createListing({ token: p.token || p.tokenAddress, propertyId: p.id || 0, amount: shares, pricePerShareWei: ethers.parseEther(String(p.sharePrice || 0.001)) });
+      showTradeMsg(`Listed ${shares} shares of ${p.title}.`);
+    } catch (e) {
+      console.error(e);
+      showTradeMsg('On-chain sell failed.');
     }
-    owner.shares -= shares;
-    localStorage.setItem('ownership', JSON.stringify(ownership));
-    p.availableShares += shares;
-    localStorage.setItem('properties', JSON.stringify(props));
-    setProperties(props);
-    let transactions = JSON.parse(localStorage.getItem('transactions') || '[]');
-    transactions.push({
-      id: transactions.length + 1,
-      type: 'sell',
-      propertyId: p.id,
-      userId: user.id,
-      shares,
-      amount: Math.round(p.sharePrice * shares * 10000) / 10000,
-      timestamp: new Date().toISOString()
-    });
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-    showTradeMsg(`Sold ${shares} shares of ${p.title}.`);
   };
   return (
     <div className="marketplace-root">
