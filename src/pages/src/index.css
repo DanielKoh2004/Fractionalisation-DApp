@@ -1,0 +1,6 @@
+/* Basic global styles for your app */
+body {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
