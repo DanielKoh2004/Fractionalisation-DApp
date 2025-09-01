@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>FractionalOwnership Tester</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <script src="https://cdn.jsdelivr.net/npm/ethers@6.13.2/dist/ethers.umd.min.js"></script>
+  <style>
+    :root { font-family: ui-sans-serif, system-ui, Arial; }
+    body { max-width: 900px; margin: 24px auto; padding: 0 16px; }
+    header { display:flex; gap:12px; align-items:center; justify-content:space-between; }
+    button { padding: 10px 14px; border: 0; border-radius: 10px; cursor: pointer; }
+    button.primary { background:#111; color:#fff; }
+    button.secondary { background:#eee; }
+    input, select { padding: 10px; border-radius: 10px; border:1px solid #ddd; width:100%; }
+    .row { display:grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .card { border: 1px solid #eee; border-radius: 16px; padding: 16px; margin: 14px 0; box-shadow: 0 1px 6px rgba(0,0,0,.05); }
+    .muted { color:#666; font-size: 12px; }
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .ok { color:#137333; }
+    .warn { color:#b80606; }
+    .spacer { height:8px; }
+    h2 { margin: 0 0 8px; }
+    h3 { margin: 0 0 10px; font-size: 16px; }
+    label { font-size: 12px; color:#555; }
+    footer { margin-top: 24px; color:#666; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h2>FractionalOwnership (FPT) — Local Tester</h2>
+      <div class="muted">Connect MetaMask → paste contract → transfer → distribute ETH → claim</div>
+    </div>
+    <button id="btnConnect" class="primary">Connect MetaMask</button>
+  </header>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label>Deployed Contract Address</label>
+        <input id="contractAddr" placeholder="0x..." />
+      </div>
+      <div>
+        <label>Account</label>
+        <input id="account" readonly class="mono" />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Network</label>
+        <input id="network" readonly />
+      </div>
+      <div>
+        <label>Token</label>
+        <input id="tokenMeta" readonly />
+      </div>
+    </div>
+    <div class="row">
+      <div>
+        <label>Your FPT Balance</label>
+        <input id="balance" readonly />
+      </div>
+      <div>
+        <label>Your Unclaimed Dividends (ETH)</label>
+        <input id="owed" readonly />
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnLoad" class="secondary">Load Contract & Refresh</button>
+  </div>
+
+  <div class="card">
+    <h3>Distribute Dividends (send ETH into contract)</h3>
+    <div class="row">
+      <div><label>Amount (ETH)</label><input id="distEth" placeholder="e.g. 0.5"/></div>
+      <div style="display:flex;align-items:end;"><button id="btnDistribute" class="primary">Distribute</button></div>
+    </div>
+    <div class="muted">This calls <span class="mono">distributeDividends()</span> with <span class="mono">msg.value</span>.</div>
+  </div>
+
+  <div class="card">
+    <h3>Claim Your Dividends</h3>
+    <button id="btnClaim" class="primary">Claim Dividend</button>
+  </div>
+
+  <div class="card">
+    <h3>Transfer FPT (to create multiple holders for testing)</h3>
+    <div class="row">
+      <div><label>Recipient</label><input id="to" placeholder="0x..."/></div>
+      <div><label>Amount (FPT)</label><input id="amt" placeholder="e.g. 10"/></div>
+    </div>
+    <div class="spacer"></div>
+    <button id="btnTransfer" class="secondary">Transfer</button>
+  </div>
+
+  <div id="log" class="card mono" style="white-space: pre-wrap; font-size: 12px;"></div>
+
+  <footer>
+    If you see “No provider”, open this page via HTTP (e.g., Live Server or <span class="mono">http-server</span>).
+  </footer>
+
+<script>
+(() => {
+  const $ = (id) => document.getElementById(id);
+  const log = (msg, ok=false) => {
+    const el = $("log");
+    const ts = new Date().toLocaleTimeString();
+    el.innerHTML = `[${ts}] ${msg}\n` + el.innerHTML;
+  };
+
+  // Minimal ABI for the functions we need
+  const ABI = [
+    "function name() view returns (string)",
+    "function symbol() view returns (string)",
+    "function decimals() view returns (uint8)",
+    "function totalSupply() view returns (uint256)",
+    "function balanceOf(address) view returns (uint256)",
+    "function transfer(address to, uint256 amount) returns (bool)",
+    "function dividends(address) view returns (uint256)",
+    "function distributeDividends() payable",
+    "function claimDividend()",
+    "event DividendsDistributed(address indexed from, uint256 amount)",
+    "event DividendClaimed(address indexed to, uint256 amount)"
+  ];
+
+  let provider, signer, account, contract, decimals = 18, symbol = "FPT";
+
+  async function connect() {
+    if (!window.ethereum) {
+      log("No wallet provider found. Install MetaMask.", false);
+      alert("MetaMask not found. Install it and refresh.");
+      return;
+    }
+    provider = new ethers.BrowserProvider(window.ethereum);
+    const chainId = (await provider.getNetwork()).chainId;
+    if (chainId !== 31337n) {
+      // try switch/add local chain
+      try {
+        await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: "0x7a69" }] }); // 31337
+      } catch (e) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_addEthereumChain",
+            params: [{
+              chainId: "0x7a69",
+              chainName: "Hardhat Local",
+              nativeCurrency: { name: "ETH", symbol: "ETH", decimals: 18 },
+              rpcUrls: ["http://127.0.0.1:8545"],
+            }]
+          });
+        } catch (e2) {
+          log("Failed to switch/add Hardhat chain. Do it manually in MetaMask.", false);
+        }
+      }
+    }
+
+    await provider.send("eth_requestAccounts", []);
+    signer = await provider.getSigner();
+    account = await signer.getAddress();
+    $("account").value = account;
+
+    const net = await provider.getNetwork();
+    $("network").value = `chainId=${net.chainId.toString()}`;
+
+    log("Wallet connected ✓", true);
+  }
+
+  async function loadContract() {
+    const addr = $("contractAddr").value.trim();
+    if (!addr || !ethers.isAddress(addr)) {
+      alert("Paste a valid contract address.");
+      return;
+    }
+    contract = new ethers.Contract(addr, ABI, signer ?? provider);
+
+    // read token meta
+    try {
+      decimals = await contract.decimals();
+      symbol = await contract.symbol();
+      const name = await contract.name();
+      $("tokenMeta").value = `${name} (${symbol}), decimals=${decimals}`;
+      // subscribe to events
+      contract.on("DividendsDistributed", (from, amount) => {
+        log(`DividendsDistributed by ${from} → ${ethers.formatEther(amount)} ETH`);
+        refreshBalances().catch(()=>{});
+      });
+      contract.on("DividendClaimed", (to, amount) => {
+        log(`DividendClaimed by ${to} ← ${ethers.formatEther(amount)} ETH`);
+        refreshBalances().catch(()=>{});
+      });
+      await refreshBalances();
+      log("Contract loaded ✓", true);
+    } catch (e) {
+      log("Failed to load contract. Is the address correct & ABI matching?", false);
+      console.error(e);
+    }
+  }
+
+  async function refreshBalances() {
+    if (!contract) return;
+    const me = account ?? (signer && await signer.getAddress());
+    const bal = await contract.balanceOf(me);
+    const owed = await contract.dividends(me);
+    $("balance").value = `${Number(ethers.formatUnits(bal, decimals)).toLocaleString()} ${symbol}`;
+    $("owed").value = `${ethers.formatEther(owed)} ETH`;
+  }
+
+  async function distribute() {
+    if (!contract) { alert("Load contract first."); return; }
+    const eth = $("distEth").value.trim() || "0";
+    const value = ethers.parseEther(eth);
+    if (value <= 0n) { alert("Enter ETH amount > 0"); return; }
+    try {
+      const tx = await contract.distributeDividends({ value });
+      log(`distributeDividends() tx: ${tx.hash}`);
+      await tx.wait();
+      log("Distribution confirmed ✓", true);
+      await refreshBalances();
+    } catch (e) {
+      log("Distribution failed. See console.", false);
+      console.error(e);
+    }
+  }
+
+  async function claim() {
+    if (!contract) { alert("Load contract first."); return; }
+    try {
+      const tx = await contract.claimDividend();
+      log(`claimDividend() tx: ${tx.hash}`);
+      await tx.wait();
+      log("Claim confirmed ✓", true);
+      await refreshBalances();
+    } catch (e) {
+      log("Claim failed. See console.", false);
+      console.error(e);
+    }
+  }
+
+  async function transfer() {
+    if (!contract) { alert("Load contract first."); return; }
+    const to = $("to").value.trim();
+    const amt = $("amt").value.trim();
+    if (!ethers.isAddress(to)) { alert("Invalid recipient."); return; }
+    if (!amt) { alert("Amount required."); return; }
+    try {
+      const amount = ethers.parseUnits(amt, decimals);
+      const tx = await contract.transfer(to, amount);
+      log(`transfer(${to}, ${amt} ${symbol}) tx: ${tx.hash}`);
+      await tx.wait();
+      log("Transfer confirmed ✓", true);
+      await refreshBalances();
+    } catch (e) {
+      log("Transfer failed. See console.", false);
+      console.error(e);
+    }
+  }
+
+  // UI events
+  $("btnConnect").onclick = connect;
+  $("btnLoad").onclick = loadContract;
+  $("btnDistribute").onclick = distribute;
+  $("btnClaim").onclick = claim;
+  $("btnTransfer").onclick = transfer;
+
+  // Auto-reload balances on account/network changes
+  if (window.ethereum) {
+    window.ethereum.on?.("accountsChanged", () => location.reload());
+    window.ethereum.on?.("chainChanged", () => location.reload());
+  }
+})();
+</script>
+</body>
+</html>
