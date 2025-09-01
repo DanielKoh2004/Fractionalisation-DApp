@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Login — RealEstate dApp</title>
+<style>
+  body{font-family:Inter,Arial;background:#f3f6fb;margin:0;padding:0;display:flex;align-items:center;justify-content:center;height:100vh}
+  .card{background:#fff;padding:28px;border-radius:12px;box-shadow:0 6px 20px rgba(20,30,60,0.08);width:360px}
+  h1{margin:0 0 12px;font-size:20px}
+  input{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #d7e0ef;box-sizing:border-box;}
+  button{width:100%;padding:10px;margin:8px 0;border-radius:8px;border:1px solid #4636e3;background:#4636e3;color:#fff;font-weight:500;box-sizing:border-box;cursor:pointer;transition:background 0.2s;}
+  button:hover{background:#0b63ff;}
+  .close-btn {
+    position:absolute;top:18px;right:18px;width:32px;height:32px;background:#edeaff;border:none;border-radius:50%;font-size:1.3rem;color:#4636e3;cursor:pointer;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 8px rgba(70,54,227,0.10);transition:background 0.2s;}
+    .close-btn:hover{background:#d7e0ef;color:#0b63ff;}
+  a{color:#0b63ff;text-decoration:none}
+</style>
+</head>
+<body>
+  <div class="card" style="position:relative;">
+    <button class="close-btn" id="closeLogin" title="Close">&times;</button>
+    <h1>Login</h1>
+    <div style="font-size:13px;color:#666">Demo admin: <code>admin@dapp</code> / <code>admin123</code></div>
+    <input id="email" placeholder="Email" />
+    <input id="password" type="password" placeholder="Password" />
+    <button id="loginBtn">Login</button>
+    <p style="font-size:13px">No account? <a href="register.html">Register here</a></p>
+  </div>
+
+<script>
+/* Init default users if not exist */
+if (!localStorage.getItem('users')){
+  const users = [
+    {id:1,email:'admin@dapp',password:'admin123',name:'Admin',isAdmin:true}
+  ];
+  localStorage.setItem('users', JSON.stringify(users));
+}
+
+/* Login logic */
+document.getElementById('loginBtn').addEventListener('click', ()=>{
+  const email = document.getElementById('email').value.trim();
+  const password = document.getElementById('password').value;
+  const users = JSON.parse(localStorage.getItem('users')||'[]');
+  const u = users.find(x=>x.email.toLowerCase()===email.toLowerCase() && x.password===password);
+  if (!u) return alert('Invalid credentials.');
+  localStorage.setItem('currentUser', JSON.stringify(u));
+  window.location.href = 'index.html';
+});
+
+document.getElementById('closeLogin').addEventListener('click', function(){
+  window.location.href = 'index.html';
+});
+</script>
+</body>
+</html>
