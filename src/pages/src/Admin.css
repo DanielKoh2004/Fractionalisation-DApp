@@ -16,10 +16,7 @@
   gap: 24px;
   flex-wrap: nowrap;
 }
-  display: flex;
-  align-items: center;
-  gap: 24px;
-}
+
 .admin-root .nav-link {
   transition: color 0.2s, box-shadow 0.2s;
   border-radius: 6px;
@@ -71,11 +68,7 @@
   margin-left: auto;
   margin-right: auto;
 }
-  color: #4636e3;
-  font-weight: 500;
-  font-size: 1.08rem;
-  font-family: Inter, Arial, sans-serif;
-}
+
 .admin-root .nav-link:hover {
   background: #edeaff;
   color: #0b63ff;
@@ -99,7 +92,7 @@
   color: #fff;
   box-shadow: 0 2px 8px rgba(70,54,227,0.10);
 }
-}
+
 .admin-root button:hover {
   background: #0b63ff;
 }
